@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ProofVault</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{color-scheme:dark;--bg:#030712;--panel:#0b0f19;--line:#1f2937;--ink:#f1f5f9;--mute:#94a3b8;--acc:#10b981;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+.hidden{display:none!important}
+.glass{background:rgba(17,24,39,.85);border:1px solid rgba(255,255,255,.08)}
+.inp{width:100%;background:#0f172a;border:1px solid #334155;border-radius:.75rem;padding:.6rem .9rem;font-size:.75rem;color:var(--ink);outline:none}
+.inp:focus{border-color:var(--acc)}
+.lbl{display:block;font-size:.65rem;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem}
+.btn{border-radius:.75rem;padding:.5rem 1rem;font-size:.75rem;font-weight:600;transition:.15s}
+.pri{background:var(--acc);color:#022c22}.pri:hover{background:#34d399}
+.sec{background:#1e293b;color:#e2e8f0;border:1px solid #334155}.sec:hover{background:#334155}
+.dng{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+.key{height:3.5rem;border-radius:1rem;background:#0f172a;border:1px solid #1e293b;font-size:1.1rem;font-weight:600}
+.key:active{transform:scale(.95)}
+.dot{width:1rem;height:1rem;border-radius:9999px;border:2px solid #475569;transition:.2s}
+.dot.on{background:var(--acc);border-color:var(--acc)}
+.shake{animation:sh .35s}
+@keyframes sh{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.cat.active{background:rgba(16,185,129,.12);color:#34d399;border-color:rgba(16,185,129,.3)}
+.pill{font-size:.65rem;padding:.1rem .55rem;border-radius:9999px;background:#1e293b;color:#cbd5e1;border:1px solid #334155}
+.pill.on{background:rgba(16,185,129,.15);color:#34d399;border-color:rgba(16,185,129,.4)}
+</style>
+</head>
+<body class="overflow-hidden">
+<div id="toasts" class="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none"></div>
+
+<!-- LOCK -->
+<div id="lock" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background:var(--bg)">
+  <div class="glass w-full max-w-sm rounded-3xl p-8 text-center">
+    <div class="text-4xl mb-3">🛡️</div>
+    <h1 class="text-2xl font-bold mb-1">ProofVault</h1>
+    <p id="lock-hint" class="text-xs text-slate-400 mb-6">Enter your 4-digit PIN. First time? Default PIN is 1234.</p>
+    <div id="dots" class="flex justify-center gap-4 mb-7"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+    <div id="pad" class="grid grid-cols-3 gap-3 max-w-[240px] mx-auto"></div>
+    <p class="text-[11px] text-slate-500 mt-6">Data stays in this browser only. The PIN is stored as a hash.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden h-full flex-col">
+  <header class="h-16 shrink-0 border-b border-slate-800 px-4 md:px-6 flex items-center justify-between gap-3" style="background:var(--panel)">
+    <div class="flex items-center gap-2 font-bold text-lg"><span class="text-xl">🔐</span><span class="text-emerald-400">ProofVault</span></div>
+    <div class="flex items-center gap-2 flex-1 justify-end">
+      <input id="search" placeholder="Search title, notes, tags, merchant…" class="inp max-w-xs hidden sm:block">
+      <button id="add-btn" class="btn pri">+ Add Proof</button>
+      <div class="relative">
+        <button id="gear" class="btn sec" aria-label="Settings">⚙️</button>
+        <div id="menu" class="hidden absolute right-0 mt-2 w-56 rounded-2xl border border-slate-800 py-2 z-40 shadow-2xl" style="background:var(--panel)">
+          <button data-a="pin" class="mi w-full text-left px-4 py-2.5 text-xs hover:bg-slate-800">🔑 Change PIN</button>
+          <button data-a="export" class="mi w-full text-left px-4 py-2.5 text-xs hover:bg-slate-800">📤 Export backup</button>
+          <button data-a="zipall" class="mi w-full text-left px-4 py-2.5 text-xs hover:bg-slate-800">📦 Download all proofs (ZIP)</button>
+          <label class="block px-4 py-2.5 text-xs hover:bg-slate-800 cursor-pointer">📥 Import backup<input id="imp" type="file" accept=".json" class="hidden"></label>
+          <button data-a="lock" class="mi w-full text-left px-4 py-2.5 text-xs text-red-400 hover:bg-slate-800">🔒 Lock now</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="flex-1 flex overflow-hidden">
+    <aside class="w-60 shrink-0 border-r border-slate-800 p-4 hidden md:flex flex-col gap-4" style="background:var(--panel)">
+      <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-2">Categories</div>
+      <nav id="cats" class="space-y-1"></nav>
+      <div class="mt-auto rounded-2xl p-4 border border-slate-800 bg-slate-900/60">
+        <div class="flex justify-between text-xs mb-2"><span class="text-slate-400">Browser storage</span><span id="st-txt" class="text-emerald-400 font-mono">—</span></div>
+        <div class="h-2 bg-slate-800 rounded-full overflow-hidden"><div id="st-bar" class="h-full bg-emerald-500" style="width:1%"></div></div>
+      </div>
+    </aside>
+    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+      <div id="mcats" class="flex md:hidden gap-2 overflow-x-auto pb-4"></div>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div><h2 id="ttl" class="text-2xl font-bold">All Proofs</h2><p id="cnt" class="text-xs text-slate-400 mt-1"></p></div>
+        <div class="flex items-center gap-2">
+          <select id="vf" class="inp !w-auto"><option value="all">All statuses</option><option>Verified</option><option>Timestamped</option><option>Unverified</option></select>
+          <button id="dl-cat" class="btn pri">⬇ Download all (ZIP)</button><button id="vm" class="btn sec" title="Toggle grid/list">▦ / ☰</button>
+        </div>
+      </div>
+      <input id="search2" placeholder="Search…" class="inp mb-4 sm:hidden">
+      <div id="tags" class="flex flex-wrap gap-2 mb-5"></div>
+      <div id="list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      <div id="empty" class="hidden text-center py-20">
+        <div class="text-5xl mb-3">📂</div>
+        <h3 class="font-semibold text-slate-300 mb-1">No proofs found</h3>
+        <p class="text-xs text-slate-500 max-w-sm mx-auto">Upload receipts, documents, photos, audio or video, or record a live voice note.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div id="m-edit" class="hidden fixed inset-0 z-50 bg-slate-950/80 items-start justify-center p-4 overflow-y-auto" style="display:none">
+  <form id="form" class="glass w-full max-w-xl rounded-3xl p-6 my-6 space-y-4">
+    <div class="flex justify-between items-center"><h3 id="m-title" class="text-xl font-bold">Add Proof</h3><button type="button" data-close class="text-slate-400 text-xl">✕</button></div>
+    <div><label class="lbl">Title *</label><input id="f-title" required class="inp" placeholder="e.g. Electricity bill January"></div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div><label class="lbl">Category</label><select id="f-cat" class="inp"></select></div>
+      <div><label class="lbl">Date *</label><input id="f-date" type="date" required class="inp"></div>
+      <div><label class="lbl">Verification</label><select id="f-ver" class="inp"><option>Verified</option><option>Timestamped</option><option>Unverified</option></select></div>
+    </div>
+    <div id="f-rec" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+      <div><label class="lbl">Amount</label><input id="f-amt" type="number" step="0.01" class="inp"></div>
+      <div><label class="lbl">Currency</label><select id="f-cur" class="inp"><option>USD</option><option>EUR</option><option>GBP</option><option selected>INR</option><option>CAD</option><option>AUD</option></select></div>
+      <div><label class="lbl">Merchant / Payer</label><input id="f-mer" class="inp"></div>
+    </div>
+    <div><label class="lbl">Tags (comma separated)</label><input id="f-tags" class="inp" placeholder="legal, bill, whatsapp"></div>
+    <div><label class="lbl">Notes</label><textarea id="f-notes" rows="2" class="inp resize-none"></textarea></div>
+    <div>
+      <label class="lbl">Attachment</label>
+      <div class="flex gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800 mb-3" id="tabs">
+        <button type="button" data-t="file" class="tab flex-1 py-2 text-xs rounded-lg">📎 File</button>
+        <button type="button" data-t="audio" class="tab flex-1 py-2 text-xs rounded-lg">🎵 Upload voice</button>
+        <button type="button" data-t="rec" class="tab flex-1 py-2 text-xs rounded-lg">🎙️ Record</button>
+      </div>
+      <div id="p-file" class="border-2 border-dashed border-slate-700 rounded-2xl p-5 text-center">
+        <input id="f-file" type="file" class="hidden">
+        <label for="f-file" class="cursor-pointer text-xs text-slate-300 block" id="f-file-lbl">Click to choose a document, image, audio, PDF or video</label>
+      </div>
+      <div id="p-audio" class="hidden border-2 border-dashed border-amber-500/40 rounded-2xl p-5 text-center bg-amber-950/10">
+        <input id="f-audio" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.oga,.aac,.opus,.amr,.3gp,.weba" class="hidden">
+        <label for="f-audio" id="f-audio-lbl" class="cursor-pointer text-xs text-amber-200 block">Choose a saved voice file (.mp3, .m4a, .wav, .ogg, WhatsApp voice)</label>
+        <div class="text-[11px] text-slate-500 my-3">or, on a phone, use its own recorder app:</div>
+        <input id="f-cap" type="file" accept="audio/*" capture class="hidden">
+        <label for="f-cap" class="btn sec inline-block cursor-pointer">🎙️ Record with phone recorder</label>
+      </div>
+      <div id="p-rec" class="hidden border border-slate-800 rounded-2xl p-5 text-center bg-slate-900/60">
+        <div id="rec-status" class="text-xs text-slate-300 mb-1">Ready to record</div>
+        <div id="rec-time" class="text-2xl font-mono text-emerald-400 font-bold mb-3">00:00</div>
+        <div class="flex justify-center gap-2">
+          <button type="button" id="rec-go" class="btn" style="background:#ef4444;color:#fff">● Start</button>
+          <button type="button" id="rec-stop" class="btn sec" disabled>■ Stop</button>
+        </div>
+      </div>
+      <div id="prev" class="hidden mt-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800"></div>
+    </div>
+    <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+      <button type="button" data-close class="btn text-slate-400">Cancel</button>
+      <button type="submit" class="btn pri">Save Proof</button>
+    </div>
+  </form>
+</div>
+
+<!-- VIEW MODAL -->
+<div id="m-view" class="hidden fixed inset-0 z-50 bg-slate-950/85 items-start justify-center p-4 overflow-y-auto" style="display:none">
+  <div class="glass w-full max-w-2xl rounded-3xl p-6 my-6">
+    <div class="flex justify-between items-start mb-4">
+      <div class="min-w-0"><div id="v-badges" class="flex gap-2 flex-wrap mb-1"></div><h3 id="v-title" class="text-lg font-bold break-words"></h3></div>
+      <button data-close class="text-slate-400 text-xl ml-3">✕</button>
+    </div>
+    <div id="v-meta" class="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs mb-4"></div>
+    <div class="mb-4"><span class="lbl">Notes</span><p id="v-notes" class="text-xs text-slate-300 bg-slate-900/90 p-4 rounded-2xl border border-slate-800 min-h-[60px] whitespace-pre-wrap"></p></div>
+    <div class="mb-4"><span class="lbl">Attachment</span><div id="v-asset" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-center justify-center min-h-[120px]"></div></div>
+    <div class="flex justify-between pt-3 border-t border-slate-800">
+      <div class="flex gap-2"><button id="v-prev" class="btn sec" title="Previous">←</button><button id="v-next" class="btn sec" title="Next">→</button><button id="v-edit" class="btn sec">✏️ Edit</button><button id="v-del" class="btn dng">🗑 Delete</button></div>
+      <button id="v-dl" class="btn pri">⬇ Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN MODAL -->
+<div id="m-pin" class="hidden fixed inset-0 z-50 bg-slate-950/80 items-center justify-center p-4" style="display:none">
+  <form id="pin-form" class="glass w-full max-w-sm rounded-3xl p-6 text-center space-y-3">
+    <h3 class="text-lg font-bold">Change PIN</h3>
+    <input id="pin-old" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" required placeholder="Current PIN" class="inp text-center text-lg tracking-widest">
+    <input id="pin-new" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" required placeholder="New 4-digit PIN" class="inp text-center text-lg tracking-widest">
+    <div class="flex gap-2"><button type="button" data-close class="btn sec flex-1">Cancel</button><button class="btn pri flex-1">Save</button></div>
+  </form>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const CATS={document:['📄','Documents'],receipt:['💳','Receipts'],screenshot:['📸','Photos'],voicememo:['🎙️','Voice Memos'],video:['🎥','Videos']};
+const SYM={USD:'$',EUR:'€',GBP:'£',INR:'₹',CAD:'$',AUD:'$'};
+const ls={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+
+/* ---------- IndexedDB (falls back to memory) ---------- */
+const mem={};
+const DB={db:null,
+ async init(){if(this.db||this.failed)return;try{this.db=await new Promise((res,rej)=>{const r=indexedDB.open('ProofVaultDB',1);r.onupgradeneeded=e=>e.target.result.createObjectStore('media');r.onsuccess=e=>res(e.target.result);r.onerror=rej})}catch{this.failed=true}},
+ async tx(mode,fn){await this.init();if(!this.db)return fn(null,true);return new Promise((res,rej)=>{const s=this.db.transaction('media',mode).objectStore('media');const r=fn(s);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
+ async put(id,v){if(!this.db&&this.failed||(await this.init(),!this.db)){mem[id]=v;return}return this.tx('readwrite',s=>s.put(v,id))},
+ async get(id){await this.init();if(!this.db)return mem[id];return this.tx('readonly',s=>s.get(id))},
+ async del(id){await this.init();if(!this.db){delete mem[id];return}return this.tx('readwrite',s=>s.delete(id))}
+};
+
+/* ---------- State ---------- */
+const S={proofs:ls.get('pv_proofs',[]),cat:'all',ver:'all',tag:null,view:'grid',q:'',pin:'',cur:null,pending:null,editing:null,rec:null,chunks:[],timer:null,secs:0,url:null};
+const save=()=>ls.set('pv_proofs',S.proofs);
+const hash=async p=>{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('pv:'+p));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')};
+function toast(msg,err){const t=document.createElement('div');t.className='px-4 py-2.5 rounded-xl text-xs font-medium shadow-xl '+(err?'bg-red-500 text-white':'bg-emerald-500 text-slate-950');t.textContent=msg;$('toasts').appendChild(t);setTimeout(()=>t.remove(),2800)}
+const show=id=>{const m=$(id);m.classList.remove('hidden');m.style.display='flex'};
+const hide=id=>{const m=$(id);m.style.display='none';m.classList.add('hidden')};
+
+/* ---------- Lock screen ---------- */
+const pad=$('pad');
+['1','2','3','4','5','6','7','8','9','C','0','⌫'].forEach(k=>{const b=document.createElement('button');b.className='key';b.textContent=k;b.onclick=()=>key(k);pad.appendChild(b)});
+function dots(){[...$('dots').children].forEach((d,i)=>d.classList.toggle('on',i<S.pin.length))}
+function key(k){if(k==='C')S.pin='';else if(k==='⌫')S.pin=S.pin.slice(0,-1);else if(S.pin.length<4)S.pin+=k;dots();if(S.pin.length===4)tryUnlock()}
+document.addEventListener('keydown',e=>{if($('lock').classList.contains('hidden'))return;if(/^\d$/.test(e.key))key(e.key);else if(e.key==='Backspace')key('⌫')});
+async function tryUnlock(){
+  const stored=ls.get('pv_pin',null)||await hash('1234');
+  if(await hash(S.pin)===stored){S.pin='';dots();$('lock').classList.add('hidden');$('app').classList.remove('hidden');$('app').style.display='flex';render();storage()}
+  else{$('dots').classList.add('shake');setTimeout(()=>{$('dots').classList.remove('shake');S.pin='';dots()},400);toast('Incorrect PIN',true)}
+}
+function lock(){$('app').classList.add('hidden');$('app').style.display='none';$('lock').classList.remove('hidden');['m-edit','m-view','m-pin'].forEach(hide);stopRec(true)}
+
+/* ---------- Rendering ---------- */
+function visible(){
+  const q=S.q.toLowerCase();
+  return S.proofs.filter(p=>(S.cat==='all'||p.category===S.cat)&&(S.ver==='all'||p.verification===S.ver)&&(!S.tag||p.tags.includes(S.tag))&&(!q||[p.title,p.notes,p.merchant,p.tags.join(' '),p.amount].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function render(){
+  const cnt=c=>c==='all'?S.proofs.length:S.proofs.filter(p=>p.category===c).length;
+  const items=[['all','🗂️','All Proofs'],...Object.entries(CATS).map(([k,v])=>[k,v[0],v[1]])];
+  $('cats').innerHTML=items.map(([k,i,n])=>`<button data-c="${k}" class="cat w-full flex justify-between items-center px-3 py-2.5 rounded-xl text-xs font-medium border border-transparent text-slate-400 hover:bg-slate-800/60 ${S.cat===k?'active':''}"><span>${i} ${n}</span><span class="pill">${cnt(k)}</span></button>`).join('');
+  $('mcats').innerHTML=items.map(([k,i,n])=>`<button data-c="${k}" class="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${S.cat===k?'bg-emerald-500 text-slate-950':'bg-slate-800 text-slate-300'}">${i} ${n}</button>`).join('');
+  document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.c;S.tag=null;render()});
+  $('ttl').textContent=S.cat==='all'?'All Proofs':CATS[S.cat][1];
+  $('dl-cat').textContent=S.cat==='all'?'⬇ Download all (ZIP)':'⬇ Download '+CATS[S.cat][1]+' (ZIP)';
+  const tags=[...new Set(S.proofs.filter(p=>S.cat==='all'||p.category===S.cat).flatMap(p=>p.tags))].sort();
+  $('tags').innerHTML=tags.length?tags.map(t=>`<button data-tag="${esc(t)}" class="pill ${S.tag===t?'on':''}">#${esc(t)}</button>`).join(''):'';
+  document.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{S.tag=S.tag===b.dataset.tag?null:b.dataset.tag;render()});
+  (S.tu||[]).forEach(u=>URL.revokeObjectURL(u));S.tu=[];
+  const list=visible();
+  $('cnt').textContent=`Showing ${list.length} of ${S.proofs.length} proofs`;
+  $('empty').classList.toggle('hidden',list.length>0);
+  const L=$('list');
+  L.className=S.view==='grid'?'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4':'flex flex-col gap-3';
+  const vc={Verified:'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',Timestamped:'text-blue-400 border-blue-500/30 bg-blue-500/10',Unverified:'text-amber-400 border-amber-500/30 bg-amber-500/10'};
+  L.innerHTML=list.map(p=>`<div data-id="${p.id}" class="card cursor-pointer rounded-2xl p-4 border border-slate-800 hover:border-emerald-500/40 transition" style="background:var(--panel)">
+    <div class="flex items-start justify-between gap-2 mb-2"><div class="text-2xl">${CATS[p.category][0]}</div><span class="text-[10px] px-2 py-0.5 rounded-full border ${vc[p.verification]}">${p.verification}</span></div>
+    ${p.file&&/^(image|video|audio)/.test(p.file.type||'')?`<div data-th="${p.id}" class="mb-3 rounded-xl overflow-hidden bg-slate-900 hidden"></div>`:''}
+    <h3 class="font-semibold text-sm mb-1 break-words">${esc(p.title)}</h3>
+    <div class="text-[11px] text-slate-500 mb-2">${esc(p.date)}${p.merchant?' · '+esc(p.merchant):''}${p.file?' · 📎 '+esc(p.file.name):''}</div>
+    ${p.amount!==''&&p.amount!=null?`<div class="text-emerald-400 font-mono text-sm mb-2">${SYM[p.currency]||''}${Number(p.amount).toFixed(2)} <span class="text-[10px] text-slate-500">${p.currency}</span></div>`:''}
+    <div class="flex flex-wrap gap-1">${p.tags.map(t=>`<span class="pill">#${esc(t)}</span>`).join('')}</div></div>`).join('');
+  document.querySelectorAll('.card').forEach(c=>c.onclick=()=>openView(c.dataset.id));
+  loadThumbs();
+}
+async function loadThumbs(){
+  for(const el of document.querySelectorAll('[data-th]')){
+    const p=S.proofs.find(x=>x.id===el.dataset.th);if(!p)continue;
+    try{
+      const r=await DB.get(p.id);if(!r||!el.isConnected)continue;
+      const t=r.type||'',u=URL.createObjectURL(r.blob);S.tu.push(u);
+      el.innerHTML=t.startsWith('image')?`<img src="${u}" class="w-full h-36 object-cover" alt="">`:t.startsWith('video')?`<video src="${u}#t=0.1" class="w-full h-36 object-cover" muted preload="metadata"></video>`:`<audio controls src="${u}" class="w-full" onclick="event.stopPropagation()"></audio>`;
+      el.classList.remove('hidden');
+    }catch{}
+  }
+}
+async function storage(){try{const e=await navigator.storage.estimate();const u=e.usage||0,q=e.quota||1;$('st-txt').textContent=(u/1048576).toFixed(1)+' MB used';$('st-bar').style.width=Math.max(1,u/q*100)+'%'}catch{$('st-txt').textContent='n/a'}}
+
+/* ---------- Add / edit ---------- */
+$('f-cat').innerHTML=Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v[0]} ${v[1]}</option>`).join('');
+$('f-cat').onchange=()=>$('f-rec').classList.toggle('hidden',$('f-cat').value!=='receipt');
+function setTab(t){$('p-audio').classList.toggle('hidden',t!=='audio');$('p-file').classList.toggle('hidden',t!=='file');$('p-rec').classList.toggle('hidden',t!=='rec');document.querySelectorAll('.tab').forEach(b=>{const on=b.dataset.t===t;b.className='tab flex-1 py-2 text-xs rounded-lg '+(on?'bg-emerald-500/10 text-emerald-400':'text-slate-400')})}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+function setPending(blob,name){S.pending={blob,name,type:blob.type||'application/octet-stream'};showPrev(blob,name)}
+function showPrev(blob,name){
+  const t=blob.type||'',u=URL.createObjectURL(blob);
+  $('prev').classList.remove('hidden');
+  $('prev').innerHTML=`<div class="text-[11px] text-amber-400 mb-1">📎 ${esc(name)} (${(blob.size/1024).toFixed(0)} KB)</div>`+(t.startsWith('audio')?`<audio controls src="${u}" class="w-full"></audio>`:t.startsWith('image')?`<img src="${u}" class="max-h-40 rounded-lg mx-auto">`:'');
+}
+$('f-file').onchange=e=>{const f=e.target.files[0];if(!f)return;$('f-file-lbl').textContent=f.name;setPending(f,f.name);const ty=f.type;if(!S.editing){if(ty.startsWith('audio'))$('f-cat').value='voicememo';else if(ty.startsWith('video'))$('f-cat').value='video';else if(ty.startsWith('image'))$('f-cat').value='screenshot';$('f-cat').onchange()}};
+const onAudio=e=>{const f=e.target.files[0];if(!f)return;$('f-audio-lbl').textContent=f.name;setPending(f,f.name);$('f-cat').value='voicememo';$('f-cat').onchange();if(!$('f-title').value)$('f-title').value=f.name.replace(/\.[^.]+$/,'')};
+$('f-audio').onchange=onAudio;$('f-cap').onchange=onAudio;
+function openEdit(id){
+  S.editing=id?S.proofs.find(p=>p.id===id):null;S.pending=null;
+  const p=S.editing;
+  $('m-title').textContent=p?'Edit Proof':'Add Proof';
+  $('f-title').value=p?.title||'';$('f-cat').value=p?.category||'document';$('f-date').value=p?.date||new Date().toISOString().slice(0,10);
+  $('f-ver').value=p?.verification||'Verified';$('f-amt').value=p?.amount??'';$('f-cur').value=p?.currency||'INR';$('f-mer').value=p?.merchant||'';
+  $('f-tags').value=p?p.tags.join(', '):'';$('f-notes').value=p?.notes||'';$('f-file').value='';$('f-audio').value='';$('f-cap').value='';$('f-audio-lbl').textContent='Choose a saved voice file (.mp3, .m4a, .wav, .ogg, WhatsApp voice)';
+  $('f-file-lbl').textContent=p?.file?'Current: '+p.file.name+' (choose to replace)':'Click to choose a document, image, audio, PDF or video';
+  $('prev').classList.add('hidden');$('rec-time').textContent='00:00';$('rec-status').textContent='Ready to record';
+  $('f-cat').onchange();setTab('file');show('m-edit');
+}
+$('form').onsubmit=async e=>{
+  e.preventDefault();
+  const id=S.editing?.id||'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const rec={id,title:$('f-title').value.trim(),category:$('f-cat').value,date:$('f-date').value,verification:$('f-ver').value,
+    amount:$('f-cat').value==='receipt'?$('f-amt').value:'',currency:$('f-cur').value,merchant:$('f-mer').value.trim(),
+    tags:$('f-tags').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean),notes:$('f-notes').value.trim(),file:S.editing?.file||null};
+  try{
+    if(S.pending){await DB.put(id,S.pending);rec.file={name:S.pending.name,type:S.pending.type,size:S.pending.blob.size}}
+    S.proofs=S.editing?S.proofs.map(p=>p.id===id?rec:p):[rec,...S.proofs];
+    save();hide('m-edit');stopRec(true);render();storage();toast('Proof saved')
+  }catch(err){toast('Could not save file: storage full?',true)}
+};
+
+/* ---------- Recording ---------- */
+async function startRec(){
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:true});
+    S.rec=new MediaRecorder(st);S.chunks=[];
+    S.rec.ondataavailable=e=>e.data.size&&S.chunks.push(e.data);
+    S.rec.onstop=()=>{st.getTracks().forEach(t=>t.stop());if(S.discard){S.discard=false;return}const b=new Blob(S.chunks,{type:S.rec.mimeType||'audio/webm'});const ext=(b.type.split('/')[1]||'webm').split(';')[0];setPending(b,'voice-note-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')+'.'+ext);$('f-cat').value='voicememo';$('f-cat').onchange();$('rec-status').textContent='Recording saved. Press Save Proof.'};
+    S.rec.start();S.secs=0;
+    S.timer=setInterval(()=>{S.secs++;$('rec-time').textContent=String(Math.floor(S.secs/60)).padStart(2,'0')+':'+String(S.secs%60).padStart(2,'0')},1000);
+    $('rec-status').textContent='Recording…';$('rec-go').disabled=true;$('rec-stop').disabled=false;
+  }catch(err){toast('Microphone is blocked in this view. Use Upload voice instead.',true);$('rec-status').textContent='Mic blocked or not available';setTab('audio')}
+}
+function stopRec(discard){
+  clearInterval(S.timer);
+  if(S.rec&&S.rec.state!=='inactive'){S.discard=!!discard;S.rec.stop()}
+  $('rec-go').disabled=false;$('rec-stop').disabled=true;
+}
+$('rec-go').onclick=startRec;$('rec-stop').onclick=()=>stopRec(false);
+
+/* ---------- View ---------- */
+async function openView(id){
+  const p=S.proofs.find(x=>x.id===id);if(!p)return;S.cur=p;
+  $('v-badges').innerHTML=`<span class="pill">${CATS[p.category][0]} ${CATS[p.category][1]}</span><span class="pill on">${p.verification}</span>`;
+  $('v-title').textContent=p.title;$('v-notes').textContent=p.notes||'No notes.';
+  const m=(l,v)=>`<div><span class="lbl">${l}</span><span class="text-slate-200">${v}</span></div>`;
+  $('v-meta').innerHTML=m('Date',esc(p.date))+(p.amount!==''&&p.amount!=null?m('Amount',`<span class="font-mono text-emerald-400">${SYM[p.currency]||''}${Number(p.amount).toFixed(2)} ${p.currency}</span>`):'')+(p.merchant?m('Merchant',esc(p.merchant)):'')+`<div class="col-span-2 sm:col-span-3"><span class="lbl">Tags</span>${p.tags.map(t=>`<span class="pill mr-1">#${esc(t)}</span>`).join('')||'—'}</div>`;
+  const box=$('v-asset');box.innerHTML='<span class="text-xs text-slate-500">Loading…</span>';
+  $('v-dl').classList.toggle('hidden',!p.file);show('m-view');
+  if(S.url){URL.revokeObjectURL(S.url);S.url=null}
+  if(!p.file){box.innerHTML='<span class="text-xs text-slate-500">No attachment</span>';return}
+  try{
+    const rec=await DB.get(p.id);if(!rec)throw 0;
+    S.url=URL.createObjectURL(rec.blob);const t=rec.type||'';
+    box.innerHTML=t.startsWith('image')?`<img src="${S.url}" class="max-h-96 rounded-lg">`:t.startsWith('audio')?`<audio controls src="${S.url}" class="w-full"></audio>`:t.startsWith('video')?`<video controls src="${S.url}" class="max-h-96 w-full rounded-lg"></video>`:t==='application/pdf'?`<iframe src="${S.url}" class="w-full h-96 rounded-lg bg-white"></iframe>`:`<div class="text-center text-xs text-slate-400"><div class="text-4xl mb-2">📄</div>${esc(p.file.name)}<br>Preview not available. Use Download.</div>`;
+  }catch{box.innerHTML='<span class="text-xs text-red-400">Attachment not found in storage.</span>'}
+}
+$('v-edit').onclick=()=>{const id=S.cur.id;hide('m-view');openEdit(id)};
+$('v-del').onclick=async()=>{if(!confirm('Delete this proof permanently?'))return;await DB.del(S.cur.id);S.proofs=S.proofs.filter(p=>p.id!==S.cur.id);save();hide('m-view');render();storage();toast('Deleted')};
+$('v-dl').onclick=async()=>{
+  const r=await DB.get(S.cur.id);if(!r)return toast('Nothing to download',true);
+  const ext=(r.name.split('.').pop()||'').toLowerCase();
+  if('gif png jpg jpeg webp mp4 webm mov txt json md docx pptx epub csv ttf html svg pdf xlsx zip fig'.split(' ').includes(ext))return saveOut(r.name,r.blob);
+  if(!window.JSZip)return toast('This file type cannot be saved directly',true);
+  const z=new JSZip();z.file(safeName(r.name),r.blob);await saveOut(safeName(S.cur.title)+'.zip',await z.generateAsync({type:'blob'}));
+};
+
+/* ---------- Backup ---------- */
+const b64=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
+async function exportBackup(){
+  try{
+    const media={};for(const p of S.proofs)if(p.file){const r=await DB.get(p.id);if(r)media[p.id]={name:r.name,type:r.type,data:await b64(r.blob)}}
+    const blob=new Blob([JSON.stringify({app:'ProofVault',v:1,proofs:S.proofs,media})],{type:'application/json'});
+    await saveOut('proofvault-backup-'+new Date().toISOString().slice(0,10)+'.json',blob)
+  }catch{toast('Export failed',true)}
+}
+$('imp').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const d=JSON.parse(await f.text());if(d.app!=='ProofVault'||!Array.isArray(d.proofs))throw 0;
+    const have=new Set(S.proofs.map(p=>p.id));let n=0;
+    for(const p of d.proofs){if(have.has(p.id))continue;const m=d.media?.[p.id];if(m){const blob=await (await fetch(m.data)).blob();await DB.put(p.id,{blob,name:m.name,type:m.type})}S.proofs.push(p);n++}
+    save();render();storage();toast(`Imported ${n} proofs`)
+  }catch{toast('Invalid backup file',true)}
+  e.target.value='';$('menu').classList.add('hidden');
+};
+
+/* ---------- Downloads ---------- */
+async function saveOut(filename,data){
+  const d=window.claude?await claude.use('downloads'):null;
+  if(!d){toast('Downloads are not available in this view',true);return false}
+  try{await d.save({filename,data});toast('Download ready');return true}
+  catch(e){if(e&&e.code!=='declined')toast('Download failed: '+(e.message||e.code),true);return false}
+}
+const safeName=s=>String(s||'file').replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'_').trim().slice(0,120)||'file';
+const csvCell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+async function downloadZip(cat){
+  if(!window.JSZip)return toast('ZIP library failed to load',true);
+  const list=cat==='all'?S.proofs:S.proofs.filter(p=>p.category===cat);
+  if(!list.length)return toast('No proofs to download',true);
+  toast('Preparing ZIP…');
+  try{
+    const zip=new JSZip(),used=new Set(),rows=[['Category','Title','Date','Verification','Amount','Currency','Merchant','Tags','Notes','File']];
+    for(const p of list){
+      const folder=CATS[p.category][1];let path='';
+      if(p.file){const r=await DB.get(p.id);if(r){let base=folder+'/'+safeName(r.name),n=1;while(used.has(base))base=folder+'/'+(++n)+'_'+safeName(r.name);used.add(base);zip.file(base,r.blob);path=base}}
+      rows.push([folder,p.title,p.date,p.verification,p.amount,p.currency,p.merchant,p.tags.join(' '),p.notes,path]);
+    }
+    zip.file('proofs-index.csv','\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\n'));
+    const blob=await zip.generateAsync({type:'blob'});
+    await saveOut('proofvault-'+cat+'-'+new Date().toISOString().slice(0,10)+'.zip',blob);
+  }catch{toast('Could not build ZIP',true)}
+}
+
+/* ---------- PIN change ---------- */
+$('pin-form').onsubmit=async e=>{
+  e.preventDefault();
+  const stored=ls.get('pv_pin',null)||await hash('1234');
+  if(await hash($('pin-old').value)!==stored)return toast('Current PIN is wrong',true);
+  ls.set('pv_pin',await hash($('pin-new').value));$('pin-old').value=$('pin-new').value='';hide('m-pin');toast('PIN updated');
+};
+
+/* ---------- Wiring ---------- */
+$('add-btn').onclick=()=>openEdit(null);
+$('gear').onclick=e=>{e.stopPropagation();$('menu').classList.toggle('hidden')};
+document.addEventListener('click',e=>{if(!e.target.closest('#menu'))$('menu').classList.add('hidden')});
+document.querySelectorAll('.mi').forEach(b=>b.onclick=()=>{$('menu').classList.add('hidden');const a=b.dataset.a;if(a==='pin')show('m-pin');else if(a==='export')exportBackup();else if(a==='zipall')downloadZip('all');else lock()});
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{['m-edit','m-view','m-pin'].forEach(hide);stopRec(true)});
+const doSearch=v=>{S.q=v;$('search').value=v;$('search2').value=v;render()};
+$('search').oninput=e=>doSearch(e.target.value);$('search2').oninput=e=>doSearch(e.target.value);
+$('vf').onchange=e=>{S.ver=e.target.value;render()};
+$('vm').onclick=()=>{S.view=S.view==='grid'?'list':'grid';render()};
+$('dl-cat').onclick=()=>downloadZip(S.cat);
+const nav=d=>{const l=visible(),i=l.findIndex(p=>p.id===S.cur.id),n=l[i+d];if(n)openView(n.id)};
+$('v-prev').onclick=()=>nav(-1);$('v-next').onclick=()=>nav(1);
+document.addEventListener('keydown',e=>{if($('m-view').classList.contains('hidden'))return;if(e.key==='ArrowLeft')nav(-1);else if(e.key==='ArrowRight')nav(1);else if(e.key==='Escape')hide('m-view')});
+dots();
+</script>
+</body>
+</html>
